@@ -390,16 +390,32 @@ fn test_pause_and_unpause_publish_typed_v1_topics() {
 #[test]
 fn test_update_admin_publishes_previous_and_new_admin() {
     let env = Env::default();
-    let (_, client, _, admin) = setup(&env, 73);
+    let (contract_id, client, _, admin) = setup(&env, 73);
     let new_admin = Address::generate(&env);
 
     client.update_admin(&new_admin);
 
-    let (topics, data) = last_event(&env);
-    assert_topics(&env, &topics, &["v1", "admin", "updated"]);
-    let (previous, next): (Address, Address) = data.try_into_val(&env).unwrap();
-    assert_eq!(previous, admin);
-    assert_eq!(next, new_admin);
+    let events = env.events().all();
+    let mut found = false;
+    for (emitter, topics, data) in events.into_iter() {
+        if topics.len() >= 3 {
+            let t0: Option<Symbol> = topics.get(0).and_then(|t| t.try_into_val(&env).ok());
+            let t1: Option<Symbol> = topics.get(1).and_then(|t| t.try_into_val(&env).ok());
+            let t2: Option<Symbol> = topics.get(2).and_then(|t| t.try_into_val(&env).ok());
+            
+            if t0 == Some(symbol_short!("v1")) && 
+               t1 == Some(symbol_short!("admin")) && 
+               t2 == Some(symbol_short!("updated")) {
+                assert_eq!(emitter, contract_id);
+                let (previous, next): (Address, Address) = data.try_into_val(&env).unwrap();
+                assert_eq!(previous, admin);
+                assert_eq!(next, new_admin);
+                found = true;
+                break;
+            }
+        }
+    }
+    assert!(found, "admin updated event not found");
 }
 
 #[test]
